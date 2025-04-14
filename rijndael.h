@@ -12,6 +12,12 @@
  #define BLOCK_ACCESS(block, row, col) (block[(row * 4) + col])
  #define BLOCK_SIZE 16
 
+ /*
+* Additional declaration
+ */
+ #define KEY_SIZE 16
+ #define NUM_ROUNDS 10
+ #define EXPANDED_KEY_SIZE (KEY_SIZE * (NUM_ROUNDS + 1))
  
  /*
   * Main encrypt/decrypt functions - the entry points to the library
