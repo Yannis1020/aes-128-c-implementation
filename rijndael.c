@@ -203,24 +203,90 @@ static unsigned char galois_multiply_by_14(unsigned char value) {
  
  /*
   * Operations used when decrypting a block
+  * InvertSubBytes transformation: Apply the inverse S-box to each
+  * byte in the state
   */
  void invert_sub_bytes(unsigned char *block) {
-   // TODO: Implement me!
+  for (int i = 0; i < BLOCK_SIZE; i++) {
+    block[i] = inv_s_box[block[i]];
+  }
  }
  
+ /*
+ * InvertShiftRows transformation: Cyclically shift the last three rows
+ * of the state by different offsets in the right direction
+ */
  void invert_shift_rows(unsigned char *block) {
-   // TODO: Implement me!
+  unsigned char temp;
+    
+  /* Row 1: Shift right by 1 */
+  temp = BLOCK_ACCESS(block, 1, 3);
+  BLOCK_ACCESS(block, 1, 3) = BLOCK_ACCESS(block, 1, 2);
+  BLOCK_ACCESS(block, 1, 2) = BLOCK_ACCESS(block, 1, 1);
+  BLOCK_ACCESS(block, 1, 1) = BLOCK_ACCESS(block, 1, 0);
+  BLOCK_ACCESS(block, 1, 0) = temp;
+  
+  /* Row 2: Shift right by 2 */
+  temp = BLOCK_ACCESS(block, 2, 0);
+  BLOCK_ACCESS(block, 2, 0) = BLOCK_ACCESS(block, 2, 2);
+  BLOCK_ACCESS(block, 2, 2) = temp;
+  
+  temp = BLOCK_ACCESS(block, 2, 1);
+  BLOCK_ACCESS(block, 2, 1) = BLOCK_ACCESS(block, 2, 3);
+  BLOCK_ACCESS(block, 2, 3) = temp;
+  
+  /* Row 3: Shift right by 3 (or left by 1) */
+  temp = BLOCK_ACCESS(block, 3, 0);
+  BLOCK_ACCESS(block, 3, 0) = BLOCK_ACCESS(block, 3, 1);
+  BLOCK_ACCESS(block, 3, 1) = BLOCK_ACCESS(block, 3, 2);
+  BLOCK_ACCESS(block, 3, 2) = BLOCK_ACCESS(block, 3, 3);
+  BLOCK_ACCESS(block, 3, 3) = temp;
  }
  
+ /*
+ * InvertMixColumns transformation: Apply the inverse of the 
+ * MixColumns matrix multiplication
+ */
  void invert_mix_columns(unsigned char *block) {
-   // TODO: Implement me!
+  unsigned char temp[4];
+    
+  for (int col = 0; col < 4; col++) {
+      /* Save the original column values */
+      for (int row = 0; row < 4; row++) {
+          temp[row] = BLOCK_ACCESS(block, row, col);
+      }
+      
+      /* Calculate the new values for each row in this column */
+      BLOCK_ACCESS(block, 0, col) = galois_multiply_by_14(temp[0]) ^ 
+                                   galois_multiply_by_11(temp[1]) ^ 
+                                   galois_multiply_by_13(temp[2]) ^ 
+                                   galois_multiply_by_9(temp[3]);
+                                   
+      BLOCK_ACCESS(block, 1, col) = galois_multiply_by_9(temp[0]) ^ 
+                                   galois_multiply_by_14(temp[1]) ^ 
+                                   galois_multiply_by_11(temp[2]) ^ 
+                                   galois_multiply_by_13(temp[3]);
+                                   
+      BLOCK_ACCESS(block, 2, col) = galois_multiply_by_13(temp[0]) ^ 
+                                   galois_multiply_by_9(temp[1]) ^ 
+                                   galois_multiply_by_14(temp[2]) ^ 
+                                   galois_multiply_by_11(temp[3]);
+                                   
+      BLOCK_ACCESS(block, 3, col) = galois_multiply_by_11(temp[0]) ^ 
+                                   galois_multiply_by_13(temp[1]) ^ 
+                                   galois_multiply_by_9(temp[2]) ^ 
+                                   galois_multiply_by_14(temp[3]);
+  }
  }
  
  /*
   * This operation is shared between encryption and decryption
+  * AddRoundKey transformation: XOR the state with the round key
   */
  void add_round_key(unsigned char *block, unsigned char *round_key) {
-   // TODO: Implement me!
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+      block[i] ^= round_key[i];
+    }
  }
  
  /*
@@ -229,8 +295,53 @@ static unsigned char galois_multiply_by_14(unsigned char value) {
   * vector, containing the 11 round keys one after the other
   */
  unsigned char *expand_key(unsigned char *cipher_key) {
-   // TODO: Implement me!
-   return 0;
+   /* Allocate memory for all round keys */
+   unsigned char *expanded_key = (unsigned char *)malloc(EXPANDED_KEY_SIZE);
+   if (!expanded_key) {
+       return NULL;  /* Memory allocation failed */
+   }
+   
+   /* Copy the first round key (the original key) */
+   memcpy(expanded_key, cipher_key, KEY_SIZE);
+   
+   /* Generate the remaining round keys */
+   for (int i = 1; i <= NUM_ROUNDS; i++) {
+       /* Start of the current round key in the expanded key */
+       unsigned char *prev_key = expanded_key + (i - 1) * KEY_SIZE;
+       unsigned char *current_key = expanded_key + i * KEY_SIZE;
+       
+       /* Copy the previous round key to the current one */
+       memcpy(current_key, prev_key, KEY_SIZE);
+       
+       /* Apply the key schedule core to the last word of the previous round key */
+       unsigned char temp[4];
+       
+       /* Rotate word (circular left shift) */
+       temp[0] = prev_key[13];  /* Byte 1 of the last word */
+       temp[1] = prev_key[14];  /* Byte 2 of the last word */
+       temp[2] = prev_key[15];  /* Byte 3 of the last word */
+       temp[3] = prev_key[12];  /* Byte 0 of the last word */
+       
+       /* Apply S-box to all bytes */
+       for (int j = 0; j < 4; j++) {
+           temp[j] = s_box[temp[j]];
+       }
+       
+       /* XOR with round constant */
+       temp[0] ^= rcon[i];
+       
+       /* XOR with the first word of the previous round key to get the first word of the current key */
+       for (int j = 0; j < 4; j++) {
+           current_key[j] = current_key[j] ^ temp[j];
+       }
+       
+       /* Generate the remaining three words using the current key */
+       for (int j = 4; j < KEY_SIZE; j++) {
+           current_key[j] = current_key[j] ^ current_key[j - 4];
+       }
+   }
+   
+   return expanded_key;
  }
  
  /*
@@ -238,17 +349,81 @@ static unsigned char galois_multiply_by_14(unsigned char value) {
   * header file should go here
   */
  unsigned char *aes_encrypt_block(unsigned char *plaintext, unsigned char *key) {
-   // TODO: Implement me!
-   unsigned char *output =
-       (unsigned char *)malloc(sizeof(unsigned char) * BLOCK_SIZE);
-   return output;
+    /* Allocate memory for the output ciphertext */
+    unsigned char *output = (unsigned char *)malloc(BLOCK_SIZE);
+    if (!output) {
+        return NULL;  /* Memory allocation failed */
+    }
+    
+    /* Copy the plaintext to the output buffer (to avoid modifying the original) */
+    memcpy(output, plaintext, BLOCK_SIZE);
+    
+    /* Generate the round keys */
+    unsigned char *expanded_key = expand_key(key);
+    if (!expanded_key) {
+        free(output);
+        return NULL;  /* Key expansion failed */
+    }
+    
+    /* Initial round: AddRoundKey only */
+    add_round_key(output, expanded_key);
+    
+    /* Main rounds (1-9) */
+    for (int round = 1; round < NUM_ROUNDS; round++) {
+        sub_bytes(output);
+        shift_rows(output);
+        mix_columns(output);
+        add_round_key(output, expanded_key + (round * KEY_SIZE));
+    }
+    
+    /* Final round (no MixColumns) */
+    sub_bytes(output);
+    shift_rows(output);
+    add_round_key(output, expanded_key + (NUM_ROUNDS * KEY_SIZE));
+    
+    /* Free the expanded key */
+    free(expanded_key);
+    
+    return output;
  }
  
  unsigned char *aes_decrypt_block(unsigned char *ciphertext,
                                   unsigned char *key) {
-   // TODO: Implement me!
-   unsigned char *output =
-       (unsigned char *)malloc(sizeof(unsigned char) * BLOCK_SIZE);
+   /* Allocate memory for the output plaintext */
+   unsigned char *output = (unsigned char *)malloc(BLOCK_SIZE);
+   if (!output) {
+       return NULL;  /* Memory allocation failed */
+   }
+   
+   /* Copy the ciphertext to the output buffer (to avoid modifying the original) */
+   memcpy(output, ciphertext, BLOCK_SIZE);
+   
+   /* Generate the round keys */
+   unsigned char *expanded_key = expand_key(key);
+   if (!expanded_key) {
+       free(output);
+       return NULL;  /* Key expansion failed */
+   }
+   
+   /* Initial round: AddRoundKey only */
+   add_round_key(output, expanded_key + (NUM_ROUNDS * KEY_SIZE));
+   
+   /* Main rounds (9-1) */
+   for (int round = NUM_ROUNDS - 1; round > 0; round--) {
+       invert_shift_rows(output);
+       invert_sub_bytes(output);
+       add_round_key(output, expanded_key + (round * KEY_SIZE));
+       invert_mix_columns(output);
+   }
+   
+   /* Final round (no InvMixColumns) */
+   invert_shift_rows(output);
+   invert_sub_bytes(output);
+   add_round_key(output, expanded_key);
+   
+   /* Free the expanded key */
+   free(expanded_key);
+   
    return output;
  }
  
