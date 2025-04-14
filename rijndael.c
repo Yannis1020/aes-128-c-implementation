@@ -57,21 +57,148 @@ static const unsigned char rcon[10] = {
   0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36
 };
 
+
+/*
+  Helper Functions
+*/
+
+/* 
+ * Helper function to multiply by 2 in GF(2^8) 
+ * Used in MixColumns transformation
+ */
+ static unsigned char galois_multiply_by_2(unsigned char value) {
+  /* Multiply by 2 (left shift) and XOR with 0x1b if the high bit is set */
+  return (value << 1) ^ (((value >> 7) & 1) * 0x1b);
+}
+
+/* 
+* Helper function to multiply by 3 in GF(2^8)
+* Used in MixColumns transformation
+*/
+static unsigned char galois_multiply_by_3(unsigned char value) {
+  /* 3 * value = (2 * value) XOR value */
+  return galois_multiply_by_2(value) ^ value;
+}
+
+/* 
+* Helper function to multiply by 9 in GF(2^8)
+* Used in InvMixColumns transformation
+*/
+static unsigned char galois_multiply_by_9(unsigned char value) {
+  /* 9 * value = 8 * value + value = 2*(2*(2*value)) + value */
+  return galois_multiply_by_2(galois_multiply_by_2(galois_multiply_by_2(value))) ^ value;
+}
+
+/* 
+* Helper function to multiply by 11 (0x0b) in GF(2^8)
+* Used in InvMixColumns transformation
+*/
+static unsigned char galois_multiply_by_11(unsigned char value) {
+  /* 11 * value = 8 * value + 2 * value + value = 2*(2*(2*value)) + 2*value + value */
+  unsigned char times_2 = galois_multiply_by_2(value);
+  unsigned char times_8 = galois_multiply_by_2(galois_multiply_by_2(times_2));
+  return times_8 ^ times_2 ^ value;
+}
+
+/* 
+* Helper function to multiply by 13 (0x0d) in GF(2^8)
+* Used in InvMixColumns transformation
+*/
+static unsigned char galois_multiply_by_13(unsigned char value) {
+  /* 13 * value = 8 * value + 4 * value + value = 2*(2*(2*value)) + 2*(2*value) + value */
+  unsigned char times_2 = galois_multiply_by_2(value);
+  unsigned char times_4 = galois_multiply_by_2(times_2);
+  unsigned char times_8 = galois_multiply_by_2(times_4);
+  return times_8 ^ times_4 ^ value;
+}
+
+/* 
+* Helper function to multiply by 14 (0x0e) in GF(2^8)
+* Used in InvMixColumns transformation
+*/
+static unsigned char galois_multiply_by_14(unsigned char value) {
+  /* 14 * value = 8 * value + 4 * value + 2 * value = 2*(2*(2*value)) + 2*(2*value) + 2*value */
+  unsigned char times_2 = galois_multiply_by_2(value);
+  unsigned char times_4 = galois_multiply_by_2(times_2);
+  unsigned char times_8 = galois_multiply_by_2(times_4);
+  return times_8 ^ times_4 ^ times_2;
+}
+
+
+
  /*
   * Operations used when encrypting a block
-   * SubBytes transformation: Substitute each byte in the state with 
- * its corresponding value in the S-box
+  * SubBytes transformation: Substitute each byte in the state with 
+  * its corresponding value in the S-box
   */
  void sub_bytes(unsigned char *block) {
-   // TODO: Implement me!
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+      block[i] = s_box[block[i]];
+    }
  }
  
+ /*
+ * ShiftRows transformation: Cyclically shift the last three rows
+ * of the state by different offsets
+ */
  void shift_rows(unsigned char *block) {
-   // TODO: Implement me!
+  usigned char temp;
+    
+  /* Row 1: Shift left by 1 */
+  temp = BLOCK_ACCESS(block, 1, 0);
+  BLOCK_ACCESS(block, 1, 0) = BLOCK_ACCESS(block, 1, 1);
+  BLOCK_ACCESS(block, 1, 1) = BLOCK_ACCESS(block, 1, 2);
+  BLOCK_ACCESS(block, 1, 2) = BLOCK_ACCESS(block, 1, 3);
+  BLOCK_ACCESS(block, 1, 3) = temp;
+  
+  /* Row 2: Shift left by 2 */
+  temp = BLOCK_ACCESS(block, 2, 0);
+  BLOCK_ACCESS(block, 2, 0) = BLOCK_ACCESS(block, 2, 2);
+  BLOCK_ACCESS(block, 2, 2) = temp;
+  
+  temp = BLOCK_ACCESS(block, 2, 1);
+  BLOCK_ACCESS(block, 2, 1) = BLOCK_ACCESS(block, 2, 3);
+  BLOCK_ACCESS(block, 2, 3) = temp;
+  
+  /* Row 3: Shift left by 3 (or right by 1) */
+  temp = BLOCK_ACCESS(block, 3, 3);
+  BLOCK_ACCESS(block, 3, 3) = BLOCK_ACCESS(block, 3, 2);
+  BLOCK_ACCESS(block, 3, 2) = BLOCK_ACCESS(block, 3, 1);
+  BLOCK_ACCESS(block, 3, 1) = BLOCK_ACCESS(block, 3, 0);
+  BLOCK_ACCESS(block, 3, 0) = temp;
  }
  
+ /*
+ * MixColumns transformation: Transform each column using a 
+ * matrix multiplication in GF(2^8)
+ */
  void mix_columns(unsigned char *block) {
-   // TODO: Implement me!
+  unsigned char temp[4];
+    
+  for (int col = 0; col < 4; col++) {
+      /* Save the original column values */
+      for (int row = 0; row < 4; row++) {
+          temp[row] = BLOCK_ACCESS(block, row, col);
+      }
+      
+      /* Calculate the new values for each row in this column */
+      BLOCK_ACCESS(block, 0, col) = galois_multiply_by_2(temp[0]) ^ 
+                                   galois_multiply_by_3(temp[1]) ^ 
+                                   temp[2] ^ temp[3];
+                                   
+      BLOCK_ACCESS(block, 1, col) = temp[0] ^ 
+                                   galois_multiply_by_2(temp[1]) ^ 
+                                   galois_multiply_by_3(temp[2]) ^ 
+                                   temp[3];
+                                   
+      BLOCK_ACCESS(block, 2, col) = temp[0] ^ temp[1] ^ 
+                                   galois_multiply_by_2(temp[2]) ^ 
+                                   galois_multiply_by_3(temp[3]);
+                                   
+      BLOCK_ACCESS(block, 3, col) = galois_multiply_by_3(temp[0]) ^ 
+                                   temp[1] ^ temp[2] ^ 
+                                   galois_multiply_by_2(temp[3]);
+  }
  }
  
  /*
