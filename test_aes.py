@@ -16,6 +16,10 @@ import unittest
 sys.path.append('./aes')  # Import the AES implementation from the submodule
 try:
     from aes import AES, encrypt, decrypt
+    # Import the individual transformation functions directly since they are available
+    from aes import sub_bytes, shift_rows, mix_columns, add_round_key
+    from aes import bytes2matrix, matrix2bytes
+    from aes import inv_sub_bytes, inv_shift_rows, inv_mix_columns
 except ImportError:
     print("Error: Could not import the reference AES implementation.")
     print("Please ensure you have added a Python AES implementation as a submodule.")
@@ -38,76 +42,86 @@ class TestAES(unittest.TestCase):
         
     def test_subbytes(self):
         """Test the SubBytes transformation"""
-        for _ in range(3):  # Test with 3 random inputs
+        for i in range(3):  # Test with 3 random inputs as required
             # Generate random input block
             input_data = bytes([random.randint(0, 255) for _ in range(16)])
+            input_copy = input_data[:]  # Make a copy for Python implementation
             
             # Create C buffer for the input
             c_block = ctypes.create_string_buffer(input_data)
             
             # Apply SubBytes in C
             self.rijndael.sub_bytes(c_block)
-            # Note: The C implementation appears to be adding an extra byte
-            # We'll only take the first 16 bytes
             c_result = bytes(c_block)[:16]
             
-            # Since the AES module doesn't expose the sub_bytes function directly,
-            # we'll skip the detailed comparison
+            # Apply SubBytes in Python
+            # Convert byte array to matrix for Python implementation
+            py_matrix = bytes2matrix(input_copy)
+            sub_bytes(py_matrix)
+            py_result = matrix2bytes(py_matrix)
             
-            # Just verify we got 16 bytes
-            self.assertEqual(len(c_result), 16, 
-                           f"SubBytes should return 16 bytes, got {len(c_result)}")
+            # Compare results
+            self.assertEqual(c_result, py_result, 
+                           f"Test {i+1}/3: SubBytes mismatch: Input={input_data.hex()}, "
+                           f"C result={c_result.hex()}, Python result={py_result.hex()}")
 
     def test_shiftrows(self):
         """Test the ShiftRows transformation"""
-        for _ in range(3):  # Test with 3 random inputs
+        for i in range(3):  # Test with 3 random inputs as required
             # Generate random input block
             input_data = bytes([random.randint(0, 255) for _ in range(16)])
+            input_copy = input_data[:]  # Make a copy for Python implementation
             
             # Create C buffer for the input
             c_block = ctypes.create_string_buffer(input_data)
             
             # Apply ShiftRows in C
             self.rijndael.shift_rows(c_block)
-            # Note: The C implementation appears to be adding an extra byte
-            # We'll only take the first 16 bytes
             c_result = bytes(c_block)[:16]
             
-            # Since the AES module doesn't expose the shift_rows function directly,
-            # we'll validate that the operation produces output of the correct size
+            # Apply ShiftRows in Python
+            # Convert byte array to matrix for Python implementation
+            py_matrix = bytes2matrix(input_copy)
+            shift_rows(py_matrix)
+            py_result = matrix2bytes(py_matrix)
             
-            # Just verify we got 16 bytes
-            self.assertEqual(len(c_result), 16, 
-                           f"ShiftRows should return 16 bytes, got {len(c_result)}")
+            # Compare results
+            self.assertEqual(c_result, py_result, 
+                           f"Test {i+1}/3: ShiftRows mismatch: Input={input_data.hex()}, "
+                           f"C result={c_result.hex()}, Python result={py_result.hex()}")
 
     def test_mixcolumns(self):
         """Test the MixColumns transformation"""
-        for _ in range(3):  # Test with 3 random inputs
+        for i in range(3):  # Test with 3 random inputs as required
             # Generate random input block
             input_data = bytes([random.randint(0, 255) for _ in range(16)])
+            input_copy = input_data[:]  # Make a copy for Python implementation
             
             # Create C buffer for the input
             c_block = ctypes.create_string_buffer(input_data)
             
             # Apply MixColumns in C
             self.rijndael.mix_columns(c_block)
-            # Note: The C implementation appears to be adding an extra byte
-            # We'll only take the first 16 bytes
             c_result = bytes(c_block)[:16]
             
-            # Since the AES module doesn't expose the mix_columns function directly,
-            # we'll validate that the operation produces output of the correct size
+            # Apply MixColumns in Python
+            # Convert byte array to matrix for Python implementation
+            py_matrix = bytes2matrix(input_copy)
+            mix_columns(py_matrix)
+            py_result = matrix2bytes(py_matrix)
             
-            # Just verify we got 16 bytes
-            self.assertEqual(len(c_result), 16, 
-                           f"MixColumns should return 16 bytes, got {len(c_result)}")
+            # Compare results
+            self.assertEqual(c_result, py_result, 
+                           f"Test {i+1}/3: MixColumns mismatch: Input={input_data.hex()}, "
+                           f"C result={c_result.hex()}, Python result={py_result.hex()}")
 
     def test_addroundkey(self):
         """Test the AddRoundKey transformation"""
-        for _ in range(3):  # Test with 3 random inputs
+        for i in range(3):  # Test with 3 random inputs as required
             # Generate random input block and round key
             input_data = bytes([random.randint(0, 255) for _ in range(16)])
             round_key = bytes([random.randint(0, 255) for _ in range(16)])
+            input_copy = input_data[:]  # Make a copy for Python implementation
             
             # Create C buffers
             c_block = ctypes.create_string_buffer(input_data)
@@ -115,102 +129,149 @@ class TestAES(unittest.TestCase):
             
             # Apply AddRoundKey in C
             self.rijndael.add_round_key(c_block, c_key)
-            # Note: The C implementation appears to be adding an extra byte
-            # We'll only take the first 16 bytes
             c_result = bytes(c_block)[:16]
             
-            # Simple XOR implementation of add_round_key
-            py_result = bytes(a ^ b for a, b in zip(input_data, round_key))
+            # Apply AddRoundKey in Python
+            # Convert byte array to matrix for Python implementation
+            py_block_matrix = bytes2matrix(input_copy)
+            py_key_matrix = bytes2matrix(round_key)
+            add_round_key(py_block_matrix, py_key_matrix)
+            py_result = matrix2bytes(py_block_matrix)
             
             # Compare results
             self.assertEqual(c_result, py_result, 
-                            f"AddRoundKey mismatch: Block={input_data.hex()}, "
+                            f"Test {i+1}/3: AddRoundKey mismatch: Block={input_data.hex()}, "
                             f"Key={round_key.hex()}, C={c_result.hex()}, "
                             f"Python={py_result.hex()}")
 
-    def test_keyexpansion(self):
-        """Test the KeyExpansion algorithm"""
-        for _ in range(3):  # Test with 3 random keys
-            # Generate random key
-            key_data = bytes([random.randint(0, 255) for _ in range(16)])
+    def test_invsubbytes(self):
+        """Test the InvSubBytes transformation"""
+        for i in range(3):  # Test with 3 random inputs as required
+            # Generate random input block
+            input_data = bytes([random.randint(0, 255) for _ in range(16)])
+            input_copy = input_data[:]  # Make a copy for Python implementation
             
-            # Create C buffer for the key
-            c_key = ctypes.create_string_buffer(key_data)
+            # Create C buffer for the input
+            c_block = ctypes.create_string_buffer(input_data)
             
-            # Expand key in C
-            c_expanded = self.rijndael.expand_key(c_key)
-            # Read 176 bytes (11 round keys * 16 bytes each)
-            c_result = bytes(c_expanded[i] for i in range(176))
+            # Apply InvSubBytes in C - using the C function name
+            self.rijndael.invert_sub_bytes(c_block)
+            c_result = bytes(c_block)[:16]
             
-            # Since we don't have direct access to the expanded key in the Python AES implementation,
-            # we'll just check that the expanded key has the correct length
+            # Apply InvSubBytes in Python
+            # Convert byte array to matrix for Python implementation
+            py_matrix = bytes2matrix(input_copy)
+            inv_sub_bytes(py_matrix)
+            py_result = matrix2bytes(py_matrix)
             
-            # The expanded key for AES-128 should be 11 round keys of 16 bytes each (176 bytes)
-            self.assertEqual(len(c_result), 176, 
-                           f"Expanded key should be 176 bytes (11 round keys), got {len(c_result)}")
+            # Compare results
+            self.assertEqual(c_result, py_result, 
+                           f"Test {i+1}/3: InvSubBytes mismatch: Input={input_data.hex()}, "
+                           f"C result={c_result.hex()}, Python result={py_result.hex()}")
+
+    def test_invshiftrows(self):
+        """Test the InvShiftRows transformation"""
+        for i in range(3):  # Test with 3 random inputs as required
+            # Generate random input block
+            input_data = bytes([random.randint(0, 255) for _ in range(16)])
+            input_copy = input_data[:]  # Make a copy for Python implementation
+            
+            # Create C buffer for the input
+            c_block = ctypes.create_string_buffer(input_data)
+            
+            # Apply InvShiftRows in C - using the C function name
+            self.rijndael.invert_shift_rows(c_block)
+            c_result = bytes(c_block)[:16]
+            
+            # Apply InvShiftRows in Python
+            # Convert byte array to matrix for Python implementation
+            py_matrix = bytes2matrix(input_copy)
+            inv_shift_rows(py_matrix)
+            py_result = matrix2bytes(py_matrix)
+            
+            # Compare results
+            self.assertEqual(c_result, py_result, 
+                           f"Test {i+1}/3: InvShiftRows mismatch: Input={input_data.hex()}, "
+                           f"C result={c_result.hex()}, Python result={py_result.hex()}")
+
+    def test_invmixcolumns(self):
+        """Test the InvMixColumns transformation"""
+        for i in range(3):  # Test with 3 random inputs as required
+            # Generate random input block
+            input_data = bytes([random.randint(0, 255) for _ in range(16)])
+            input_copy = input_data[:]  # Make a copy for Python implementation
+            
+            # Create C buffer for the input
+            c_block = ctypes.create_string_buffer(input_data)
+            
+            # Apply InvMixColumns in C - using the C function name
+            self.rijndael.invert_mix_columns(c_block)
+            c_result = bytes(c_block)[:16]
+            
+            # Apply InvMixColumns in Python
+            # Convert byte array to matrix for Python implementation
+            py_matrix = bytes2matrix(input_copy)
+            inv_mix_columns(py_matrix)
+            py_result = matrix2bytes(py_matrix)
+            
+            # Compare results
+            self.assertEqual(c_result, py_result, 
+                           f"Test {i+1}/3: InvMixColumns mismatch: Input={input_data.hex()}, "
+                           f"C result={c_result.hex()}, Python result={py_result.hex()}")
 
     def test_encrypt_decrypt_full(self):
         """Test the full encryption and decryption process"""
-        for _ in range(3):  # Test with 3 random inputs
+        for i in range(3):  # Test with 3 random inputs as required
             # Generate random plaintext and key
             plaintext = bytes([random.randint(0, 255) for _ in range(16)])
             key = bytes([random.randint(0, 255) for _ in range(16)])
+            
+            print(f"\nTest {i+1}/3:")
+            print(f"Plaintext: {plaintext.hex()}")
+            print(f"Key: {key.hex()}")
             
             # Create C buffers
             c_plaintext = ctypes.create_string_buffer(plaintext)
             c_key = ctypes.create_string_buffer(key)
             
+            # ENCRYPTION TEST
+            
             # Encrypt using C implementation
             c_ciphertext_ptr = self.rijndael.aes_encrypt_block(c_plaintext, c_key)
-            c_ciphertext = bytes(c_ciphertext_ptr[i] for i in range(16))
+            c_ciphertext = bytes([c_ciphertext_ptr[i] for i in range(16)])
+            print(f"C Ciphertext: {c_ciphertext.hex()}")
             
-            # Create Python AES instance
+            # Create Python AES instance and encrypt
             py_aes = AES(key)
+            py_ciphertext = py_aes.encrypt_block(plaintext)
+            print(f"Python Ciphertext: {py_ciphertext.hex()}")
             
-            # Use the correct block to test
-            test_block = plaintext
-            if len(test_block) < 16:
-                # Pad to 16 bytes if necessary
-                test_block = test_block.ljust(16, b'\x00')
-                
-            # Try to get ciphertext from Python implementation
-            try:
-                py_ciphertext = py_aes.encrypt_block(test_block)
-                self.assertEqual(len(py_ciphertext), 16, "Python encryption should produce 16 bytes")
-                
-                # Compare encryption results - skip this if implementations are different
-                # NOTE: We're just checking our implementations are compatible
-                # instead of strict equality testing
-                if c_ciphertext != py_ciphertext:
-                    print(f"Warning: C and Python encryption results differ for plaintext={plaintext.hex()}")
-                    print(f"C result: {c_ciphertext.hex()}")
-                    print(f"Python result: {py_ciphertext.hex()}")
-            except Exception as e:
-                print(f"Warning: Python encryption failed: {e}")
-                # Continue with test but skip the comparison
-                py_ciphertext = None
+            # Compare encryption results
+            self.assertEqual(c_ciphertext, py_ciphertext, 
+                           f"Encryption mismatch: Plaintext={plaintext.hex()}, "
+                           f"Key={key.hex()}, C ciphertext={c_ciphertext.hex()}, "
+                           f"Python ciphertext={py_ciphertext.hex()}")
             
-            # Create C buffer for ciphertext
+            # DECRYPTION TEST
+            
+            # Decrypt C ciphertext using C implementation
             c_cipher_buffer = ctypes.create_string_buffer(c_ciphertext)
-            
-            # Decrypt using C implementation
             c_decrypted_ptr = self.rijndael.aes_decrypt_block(c_cipher_buffer, c_key)
-            c_decrypted = bytes(c_decrypted_ptr[i] for i in range(16))
+            c_decrypted = bytes([c_decrypted_ptr[i] for i in range(16)])
+            print(f"C Decrypted: {c_decrypted.hex()}")
             
-            # Compare C decryption result with original plaintext
+            # Decrypt Python ciphertext using Python implementation
+            py_decrypted = py_aes.decrypt_block(py_ciphertext)
+            print(f"Python Decrypted: {py_decrypted.hex()}")
+            
+            # Compare decryption results with original plaintext
             self.assertEqual(c_decrypted, plaintext, 
-                            f"C Decryption mismatch: Original={plaintext.hex()}, "
-                            f"Decrypted={c_decrypted.hex()}")
+                           f"C Decryption mismatch: Original={plaintext.hex()}, "
+                           f"Decrypted={c_decrypted.hex()}")
             
-            # Skip Python decryption comparison if we didn't get a valid Python ciphertext
-            if py_ciphertext:
-                try:
-                    py_decrypted = py_aes.decrypt_block(py_ciphertext)
-                    self.assertEqual(py_decrypted, test_block, 
-                                    f"Python Decryption mismatch: Original={test_block.hex()}, "
-                                    f"Decrypted={py_decrypted.hex()}")
-                except Exception as e:
-                    print(f"Warning: Python decryption failed: {e}")
+            self.assertEqual(py_decrypted, plaintext, 
+                           f"Python Decryption mismatch: Original={plaintext.hex()}, "
+                           f"Decrypted={py_decrypted.hex()}")
             
             # Free C allocated memory
             libc = ctypes.CDLL(None)
