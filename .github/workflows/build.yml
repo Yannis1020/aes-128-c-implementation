@@ -1,26 +1,41 @@
-name: Build and Test the project
-on: push
+name: Build and Test Project # Renamed slightly for clarity
+
+on: push # Trigger on push events to any branch
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build: # The job name
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner
     steps:
-      - name: Clone the repo
-        uses: actions/checkout@v4
-      
+      - name: Clone the repo including submodules # Name of the step
+        uses: actions/checkout@v4 # Use the checkout action v4
+        with: # Inputs for the checkout action
+          submodules: true # <<< CORRECT PLACEMENT: Tell checkout to fetch submodules
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
-      
+          # Using a specific version is generally recommended over '3.x' for reproducibility
+          python-version: '3.11'
+
       - name: Install dependencies
         run: |
-          sudo apt install -y build-essential python-is-python3
+          python -m pip install --upgrade pip
+          # Only include apt install if your project or its deps need C compilation tools
+          # sudo apt-get update && sudo apt-get install -y build-essential
+          # Recommended: Install dependencies from a requirements file
+          # Ensure pytest is listed in this file
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # Fallback: install pytest directly if not using requirements.txt (less ideal)
           pip install pytest
-      
-      - name: Build the code
+
+      - name: Build the code (if necessary)
         run: |
+          # This step assumes you have a Makefile with a default target for building
+          # If your Python project doesn't need a C build step, you might not need this
           make
-      
+
       - name: Run unit tests
         run: |
+          # Runs pytest specifically on test_aes.py with verbose output
           python -m pytest test_aes.py -v
+          # python -m pytest -v
