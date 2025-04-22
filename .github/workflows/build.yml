@@ -1,4 +1,4 @@
-name: Build the project
+name: Build and Test the project
 on: push
 jobs:
   build:
@@ -6,7 +6,21 @@ jobs:
     steps:
       - name: Clone the repo
         uses: actions/checkout@v4
-      - name: Build the code
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
         run: |
           sudo apt install -y build-essential python-is-python3
+          pip install pytest
+      
+      - name: Build the code
+        run: |
           make
+      
+      - name: Run unit tests
+        run: |
+          python -m pytest test_aes.py -v
